@@ -12,6 +12,7 @@ plugins {
     id 'eclipse'
     id 'idea'
     id 'net.minecraftforge.gradle' version '[6.0.16,6.2)'
+    id 'com.github.johnrengelman.shadow' version "8.1.1"
 }
 
 apply plugin: 'org.spongepowered.mixin'
@@ -76,16 +77,22 @@ mixin {
 sourceSets.main.resources { srcDir 'src/generated/resources' }
 
 repositories {
-    // flatDir {
-    //     dir 'libs'
-    // }
+    flatDir {
+        dir 'libs'
+    }
+}
+
+configurations {
+    shaded
+    implementation.extendsFrom shaded
 }
 
 dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
 
-    annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+    shaded fg.deobf("blank:admiral-forge:0.4.8+1.20.1")
 
+    annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 }
 
 tasks.named('processResources', ProcessResources).configure {
@@ -113,6 +120,19 @@ tasks.named('jar', Jar).configure {
                     "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")])
     }
     finalizedBy 'reobfJar'
+}
+
+shadowJar {
+    archiveClassifier = ''
+    configurations = [project.configurations.shaded]
+    relocate 'de.maxhenkel', 'libraries.admiral'
+    finalizedBy 'reobfShadowJar'
+}
+
+assemble.dependsOn shadowJar
+
+reobf {
+    shadowJar {}
 }
 
 tasks.withType(JavaCompile).configureEach {
