@@ -12,7 +12,7 @@ plugins {
     id 'eclipse'
     id 'idea'
     id 'net.minecraftforge.gradle' version '[6.0.16,6.2)'
-    id 'com.github.johnrengelman.shadow' version "8.1.1"
+    id 'com.github.johnrengelman.shadow' version "${shadow_version}"
 }
 
 apply plugin: 'org.spongepowered.mixin'
@@ -83,15 +83,13 @@ repositories {
 }
 
 configurations {
-    shaded
-    implementation.extendsFrom shaded
+    includedLibrary
+    implementation.extendsFrom includedLibrary
 }
 
 dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
-
-    shaded fg.deobf("blank:admiral-forge:0.4.8+1.20.1")
-
+    includedLibrary fg.deobf("blank:admiral-forge:0.4.8+1.20.1")
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 }
 
@@ -100,7 +98,9 @@ tasks.named('processResources', ProcessResources).configure {
                              forge_version       : forge_version, forge_version_range: forge_version_range,
                              loader_version_range: loader_version_range,
                              mod_id              : mod_id, mod_name: mod_name, mod_license: mod_license, mod_version: mod_version,
-                             mod_authors         : mod_authors, mod_description: mod_description,]
+                             mod_authors         : mod_authors, mod_description: mod_description,
+                             shadow_version      : shadow_version,
+    ]
 
     inputs.properties replaceProperties
 
@@ -124,7 +124,7 @@ tasks.named('jar', Jar).configure {
 
 shadowJar {
     archiveClassifier = ''
-    configurations = [project.configurations.shaded]
+    configurations = [project.configurations.includedLibrary]
     relocate 'de.maxhenkel', 'libraries.admiral'
     finalizedBy 'reobfShadowJar'
 }
