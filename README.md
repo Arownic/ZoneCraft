@@ -4,5 +4,5 @@ ZoneCraft is a Minecraft mod which intends to recreate elements from the S.T.A.L
 
 This includes:
 * Anomalies
-* Artefacts
+* Artifacts
 * Emission
