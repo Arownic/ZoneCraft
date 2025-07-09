@@ -8,22 +8,29 @@ import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.biome.BiomeManager;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.server.ServerLifecycleHooks;
+import zonecraftmod.config.ServerConfig;
 import zonecraftmod.network.PacketHandler;
 import zonecraftmod.network.packets.EmissionActivityPacket;
 import zonecraftmod.network.packets.EmissionColorPacket;
-import zonecraftmod.util.ColorUtil;
+import zonecraftmod.util.VectorUtil;
 
 public class Emission {
+    static final Vec3 emissionColor = new Vec3(1, 0.1, 0);
+    static Vec3 defaultSkyColor;
+    static Vec3 lastKnownColor;
+    static boolean activeEmission = false;
+    static boolean isForwardTransition = true;
+    static boolean isTransitioning = false;
+    static boolean playersTakeDamage = false;
+    static boolean stillPoint = false;
+    static boolean changeIncrements = true;
 
-    private static final Vec3 emmissionColor = new Vec3(1, 0.1, 0);
-    private static Vec3 defaultSkyColor;
-    private static Vec3 lastKnownColor;
-    private static boolean activeEmmission = false;
-    private static boolean isForwardTransition = true;
-    private static boolean isTransitioning = false;
-    private static boolean playersTakeDamage = false;
-    public static boolean stillPoint = false;
-    private static int tickCount = 0;
+    static double incrementX = Double.NaN;
+    static double incrementY = Double.NaN;
+    static double incrementZ = Double.NaN;
+
+    private static int tickCount = 1;
+    private static int lightningTick = 5;
 
     static MinecraftServer minecraftServer = ServerLifecycleHooks.getCurrentServer();
     public static Vec3 getSkyColor() {
@@ -62,45 +69,82 @@ public class Emission {
     }
 
     public static void startEmission() {
-        activeEmmission = true;
-        isTransitioning = true;
-        isForwardTransition = true;
-        defaultSkyColor = getSkyColor();
-        lastKnownColor = defaultSkyColor;
-        GameRules rules = minecraftServer.getGameRules();
-        rules.getRule(GameRules.RULE_DAYLIGHT).set(false, minecraftServer);
-        rules.getRule(GameRules.RULE_WEATHER_CYCLE).set(false, minecraftServer);
-        PacketHandler.sendToAll(new EmissionActivityPacket(true));
+        if (!activeEmission) {
+            activeEmission = true;
+            isTransitioning = true;
+            isForwardTransition = true;
+            defaultSkyColor = getSkyColor();
+            lastKnownColor = defaultSkyColor;
+            GameRules rules = minecraftServer.getGameRules();
+            rules.getRule(GameRules.RULE_DAYLIGHT).set(false, minecraftServer);
+            rules.getRule(GameRules.RULE_WEATHER_CYCLE).set(false, minecraftServer);
+            PacketHandler.sendToAll(new EmissionActivityPacket(true));
+        }
     }
 
+
     public static void emissionTick() {
-        if (activeEmmission) {
+        if (activeEmission) {
+            /*
+            if (lightningTick < 1) {
+                PacketHandler.sendToAll(new SummonLightningPacket());
+                lightningTick = 5;
+            }
+            */
             if (isTransitioning) {
                 if (isForwardTransition) {
-                    if (lastKnownColor.equals(emmissionColor)) {
+                    if (changeIncrements) {
+                        incrementX = VectorUtil.getIncrementValue(defaultSkyColor.x,emissionColor.x, ServerConfig.timeToEmissionPeek);
+                        incrementY = VectorUtil.getIncrementValue(defaultSkyColor.y,emissionColor.y, ServerConfig.timeToEmissionPeek);
+                        incrementZ = VectorUtil.getIncrementValue(defaultSkyColor.z,emissionColor.z, ServerConfig.timeToEmissionPeek);
+                        ZoneCraftMod.LOGGER.info("Increments:");
+                        ZoneCraftMod.LOGGER.info("X: {}", incrementX);
+                        ZoneCraftMod.LOGGER.info("Y: {}", incrementY);
+                        ZoneCraftMod.LOGGER.info("Z: {}", incrementZ);
+                        changeIncrements = false;
+                    }
+                    if (lastKnownColor.equals(emissionColor)) {
                         isForwardTransition = false; // false equals backward transition
                         isTransitioning = false;
                         stillPoint = true;
                         playersTakeDamage = true;
-                        tickCount = 100;
+                        changeIncrements = true;
+                        tickCount = ServerConfig.emissionPeekTime*20;
                         ZoneCraftMod.LOGGER.info("Completed Forward Transition");
                     }
                     if (tickCount < 1) {
                         ZoneCraftMod.LOGGER.info("Presumed SkyColor: " + defaultSkyColor);
                         ZoneCraftMod.LOGGER.info("Last known Color: " + lastKnownColor);
-                        Vec3 color = ColorUtil.incrementVec3(lastKnownColor, emmissionColor);
+                        //Vec3 color = Vec3Util.incrementVec3(lastKnownColor, emissionColor);
+                        //Vec3 color = lastKnownColor.add(new Vec3(incrementX, incrementY, incrementZ));
+                        Vec3 color = new Vec3(
+                                VectorUtil.incrementVec3Value(incrementX,lastKnownColor.x(),emissionColor.x()),
+                                VectorUtil.incrementVec3Value(incrementY,lastKnownColor.y(),emissionColor.y()),
+                                VectorUtil.incrementVec3Value(incrementZ,lastKnownColor.z(),emissionColor.z())
+                        );
                         PacketHandler.sendToAll(new EmissionColorPacket(color.x, color.y, color.z));
                         lastKnownColor = color;
-                        tickCount = 5;
+                        tickCount = 1;
                         ZoneCraftMod.LOGGER.info("Cycle");
                         ZoneCraftMod.LOGGER.info("Current RGB Color: " + color.x + ", " + color.y + ", " + color.z);
                     }
                 } else {
+                    if (changeIncrements) {
+                        incrementX = VectorUtil.getIncrementValue(emissionColor.x,defaultSkyColor.x, ServerConfig.timeFromEmissionPeek);
+                        incrementY = VectorUtil.getIncrementValue(emissionColor.y,defaultSkyColor.y, ServerConfig.timeFromEmissionPeek);
+                        incrementZ = VectorUtil.getIncrementValue(emissionColor.z,defaultSkyColor.z, ServerConfig.timeFromEmissionPeek);
+                        ZoneCraftMod.LOGGER.info("Increments:");
+                        ZoneCraftMod.LOGGER.info("X: {}", incrementX);
+                        ZoneCraftMod.LOGGER.info("Y: {}", incrementY);
+                        ZoneCraftMod.LOGGER.info("Z: {}", incrementZ);
+                        changeIncrements = false;
+                    }
                     if (lastKnownColor.equals(defaultSkyColor)) {
                         isTransitioning = false;
                         isForwardTransition = true;
-                        activeEmmission = false;
-                        tickCount = 0;
+                        activeEmission = false;
+                        changeIncrements = true;
+                        tickCount = 1;
                         ZoneCraftMod.LOGGER.info("Completed Emission");
                         GameRules rules = minecraftServer.getGameRules();
                         rules.getRule(GameRules.RULE_DAYLIGHT).set(true, minecraftServer);
@@ -109,114 +153,37 @@ public class Emission {
                     }
                     if (tickCount < 1) {
                         ZoneCraftMod.LOGGER.info("Presumed SkyColor: " + defaultSkyColor);
-                        Vec3 color = ColorUtil.incrementVec3_m2(lastKnownColor, defaultSkyColor);
+                        //Vec3 color = lastKnownColor.add(new Vec3(-incrementX, -incrementY, -incrementZ));
+                        Vec3 color = new Vec3(
+                                VectorUtil.incrementVec3Value(incrementX,lastKnownColor.x(),defaultSkyColor.x()),
+                                VectorUtil.incrementVec3Value(incrementY,lastKnownColor.y(),defaultSkyColor.y()),
+                                VectorUtil.incrementVec3Value(incrementZ,lastKnownColor.z(),defaultSkyColor.z())
+                        );
+                        //Vec3 color = Vec3Util.incrementVec3(lastKnownColor, defaultSkyColor);
                         PacketHandler.sendToAll(new EmissionColorPacket(color.x, color.y, color.z));
                         lastKnownColor = color;
-                        tickCount = 5;
+                        tickCount = 1;
                         ZoneCraftMod.LOGGER.info("Cycle");
                         ZoneCraftMod.LOGGER.info("Current RGB Color: " + color.x + ", " + color.y + ", " + color.z);
                     }
                 }
             } else if (stillPoint) {
+                ZoneCraftMod.LOGGER.info("peek cycle");
+                // add damage detection
                 if (tickCount < 1) {
                     isTransitioning = true;
                     stillPoint = false;
                     playersTakeDamage = false;
-                    tickCount = 5;
+                    tickCount = 1;
                     ZoneCraftMod.LOGGER.info("Completed Still Point");
                 }
             }
-            tickCount--;
         }
-        /*
-        if (ZoneCraftMod.activeEmmission || ZoneCraftMod.emmissionTransition) {
-            Vec3 color = zonecraft$currentSkyColor;
-            if (ZoneCraftMod.emmissionTransition) {
-                if (zonecraft$transitionType) {
-                    if (zonecraft$currentSkyColor.equals(zonecraft$originalSkyColor)) {
-                        ZoneCraftMod.emmissionTransition = false;
-                        //ZoneCraftMod.activeEmmission = false;
-                        zonecraft$transitionType = false;
-                        ZoneCraftMod.LOGGER.info("Completed");
-                    }
-                    if (zonecraft$ticksBeforeChange < 1) {
-                        ZoneCraftMod.LOGGER.info("Presumed SkyColor: " + Emission.getSkyColor());
-                        color = Vec3Util.incrementVec3_m2(zonecraft$currentSkyColor, zonecraft$originalSkyColor);
-                        zonecraft$currentSkyColor = color;
-                        zonecraft$ticksBeforeChange = 125;
-                        ZoneCraftMod.LOGGER.info("Cycle");
-                        ZoneCraftMod.LOGGER.info("Current RGB Color: " + color.x + ", " + color.y + ", " + color.z);
-                    }
-                } else if (!zonecraft$transitionType) {
-                    if (zonecraft$currentSkyColor.equals(ZoneCraftMod.emmissionColor)) {
-                        ZoneCraftMod.emmissionTransition = false;
-                        ZoneCraftMod.activeEmmission = true;
-                        ZoneCraftMod.LOGGER.info("Completed");
-                        zonecraft$ticksBeforeChange = 250;
-                    }
-                    if (zonecraft$ticksBeforeChange < 1) {
-                        ZoneCraftMod.LOGGER.info("Presumed SkyColor: " + Emission.getSkyColor());
-                        color = Vec3Util.incrementVec3(zonecraft$currentSkyColor, ZoneCraftMod.emmissionColor);
-                        zonecraft$currentSkyColor = color;
-                        zonecraft$ticksBeforeChange = 125;
-                        ZoneCraftMod.LOGGER.info("Cycle");
-                        ZoneCraftMod.LOGGER.info("Current RGB Color: " + color.x + ", " + color.y + ", " + color.z);
-                    }
-                }
-            } else if (ZoneCraftMod.activeEmmission) {
-                color = ZoneCraftMod.emmissionColor;
-                if (zonecraft$ticksBeforeChange < 1) {
-                    ZoneCraftMod.emmissionTransition = true;
-                    zonecraft$transitionType = true;
-                    ZoneCraftMod.activeEmmission = false;
-                    zonecraft$ticksBeforeChange = 125;
-                }
-            } else {cir.cancel();}
-
-            float timeOfDay = this.getTimeOfDay(tick);
-            float rainLevel = this.getRainLevel(tick);
-            float thunderLevel = this.getThunderLevel(tick);
-            int flashTime = ((ClientLevel) (Object) this).getSkyFlashTime();
-
-            float f1 = Mth.cos(timeOfDay * ((float)Math.PI * 2F)) * 2.0F + 0.5F;
-            f1 = Mth.clamp(f1, 0.1F, 1.0F);
-            float red = (float)color.x * f1;
-            float green = (float)color.y * f1;
-            float blue = (float)color.z * f1;
-
-            if (rainLevel > 0.0F) {
-                float f6 = (red * 0.3F + green * 0.59F + blue * 0.11F) * 0.6F;
-                float f7 = 1.0F - rainLevel * 0.75F;
-                red = red * f7 + f6 * (1.0F - f7);
-                green = green * f7 + f6 * (1.0F - f7);
-                blue = blue * f7 + f6 * (1.0F - f7);
-            }
-
-            if (thunderLevel > 0.0F) {
-                float f10 = (red * 0.3F + green * 0.59F + blue * 0.11F) * 0.2F;
-                float f8 = 1.0F - thunderLevel * 0.75F;
-                red = red * f8 + f10 * (1.0F - f8);
-                green = green * f8 + f10 * (1.0F - f8);
-                blue = blue * f8 + f10 * (1.0F - f8);
-            }
-
-            if (flashTime > 0) {
-                float f11 = (float)flashTime - tick;
-                if (f11 > 1.0F) {
-                    f11 = 1.0F;
-                }
-
-                f11 *= 0.45F;
-                red = red * (1.0F - f11) + 0.8F * f11;
-                green = green * (1.0F - f11) + 0.8F * f11;
-                blue = blue * (1.0F - f11) + 1.0F * f11;
-            }
-            zonecraft$ticksBeforeChange--;
-            cir.setReturnValue(new Vec3(red, green, blue));
-         */
+        //lightningTick--;
+        tickCount--;
     }
 
     public static boolean isEmissionActive() {
-        return activeEmmission;
+        return activeEmission;
     }
 }

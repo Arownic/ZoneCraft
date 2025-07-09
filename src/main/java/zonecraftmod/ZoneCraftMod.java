@@ -14,6 +14,8 @@ import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import org.slf4j.Logger;
 import zonecraftmod.commands.EmissionCommand;
+import zonecraftmod.config.ClientConfig;
+import zonecraftmod.config.ServerConfig;
 import zonecraftmod.network.PacketHandler;
 
 @Mod(ZoneCraftMod.MODID)
@@ -25,7 +27,8 @@ public class ZoneCraftMod {
         IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
         modEventBus.addListener(this::commonSetup);
         MinecraftForge.EVENT_BUS.register(this);
-        ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, Config.SPEC);
+        ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, ServerConfig.SPEC);
+        ModLoadingContext.get().registerConfig(ModConfig.Type.CLIENT, ClientConfig.SPEC);
     }
 
     private void commonSetup(final FMLCommonSetupEvent evt) {
@@ -34,7 +37,7 @@ public class ZoneCraftMod {
 
     @SubscribeEvent
     public void serverTick(TickEvent.ServerTickEvent event) {
-        if (Emission.isEmissionActive()) {
+        if (Emission.isEmissionActive() && event.phase.equals(TickEvent.Phase.END)) {
             Emission.emissionTick();
         }
     }
